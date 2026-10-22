@@ -1,0 +1,112 @@
+# credit-memo-agent
+
+An autonomous agent that turns a loan analyst's plain-English request into an audit-ready
+**credit memo (.docx)**. It plans its own tasks, fetches the borrower's data, computes the
+ratios, checks them against credit policy, checks its own memo for gaps, and fixes them
+before handing it to a credit officer.
+
+**The rule it is built on: the LLM plans and writes; code calculates and decides.**
+A credit decision never depends on a model doing arithmetic.
+
+Python · LangGraph · FastAPI · Groq (Llama) · Pydantic · python-docx
+
+## How it works
+
+```mermaid
+flowchart LR
+    A[POST /agent] --> B[validate_request]
+    B --> C[plan<br/>LLM]
+    C --> D{validate_plan<br/>Pydantic}
+    D -- invalid, max 3 tries --> C
+    D -- valid --> E[execute task<br/>tool registry]
+    E -- more tasks --> E
+    E --> F{self_check<br/>code}
+    F -- gaps found, 1 repair --> G[repair<br/>add tasks]
+    G --> E
+    F -- complete --> H[render_docx]
+    H --> I[memo + task list + audit trail]
+```
+
+1. **Plan.** The LLM reads the request and returns a JSON plan: which data to fetch, what to
+   compute, which sections to write, and the assumptions it is making about missing or
+   conflicting information. An invalid plan (unknown tool, bad arguments) is sent back to
+   the model with the validation error.
+2. **Execute.** Each task calls a tool from a fixed allowlist. A failed task is recorded and
+   the run continues.
+3. **Self-check** (the engineering improvement). Code verifies the finished memo: all 5
+   sections written, all ratios computed, every policy rule tested. Missing pieces are added
+   back as new tasks, once, and anything still missing is flagged in the memo.
+4. **Render.** A Word memo with the recommendation, assumptions and open questions, the
+   ratio and policy tables, a sign-off block for the credit officer, and the agent's full
+   task log as an audit trail.
+
+## Who does what
+
+| Step | Done by | Why |
+|---|---|---|
+| Deciding what to fetch and write | LLM | Each request is different |
+| Fetching borrower data | Code (tools) | Facts come from systems, not the model |
+| DSCR, loan-to-value, debt/equity, current ratio, GST vs bank gap | **Code** | Arithmetic must be exact and testable |
+| Policy pass/fail and the recommendation | **Code** | A lending decision must be explainable and auditable |
+| Writing each memo section | LLM, from that section's facts only | Prose is the model's job; it may not introduce new numbers |
+| Completeness and policy check | Code | The agent checks its own work before a human does |
+
+## Demo scenarios
+
+The borrowers and the credit policy are mock data in `app/mock_data.json`.
+
+| Request | What the agent has to handle | Expected outcome |
+|---|---|---|
+| "Prepare a credit memo for Shree Ganesh Packaging's ₹2 crore working-capital loan." | Complete data | All 6 policy rules pass · DSCR 1.60 · **recommend approval** |
+| "Draft a credit memo for Patel Agro's ₹5 crore term loan. We want it in committee this week. Their FY25 audited financials aren't in yet, and their GST turnover doesn't match their bank statements." | Missing financials, conflicting data, time pressure | Uses FY25 provisional figures and says so · flags an 18% GST vs bank gap · DSCR 1.08 below the 1.25 minimum · **refer to committee with conditions** |
+| "Quick memo for Shree Ganesh, just the financials and a recommendation." | A plan that skips required sections | Self-check adds the 3 missing sections the memo template requires |
+
+## API
+
+```http
+POST /agent
+{"request": "Draft a credit memo for Patel Agro's ₹5 crore term loan..."}
+```
+
+Returns the agent's task list (each task's tool, LLM or code, status and timing), the
+assumptions, flags and open questions, the self-check result, the recommendation and a
+`document_url`. `GET /documents/{run_id}` downloads the memo. Invalid input gets a 422; a
+plan that is still invalid after 3 tries returns `status: "failed"` with the reason.
+
+## Run it
+
+```bash
+uv sync
+export GROQ_API_KEY=...
+uv run uvicorn app.main:app --reload
+# open http://localhost:8000 for the demo page, or http://localhost:8000/docs
+uv run pytest
+```
+
+## Layout
+
+```
+app/
+  graph.py         LangGraph state, nodes and edges
+  schemas.py       Plan, Task, request and response models
+  prompts.py       planning and section-writing prompts
+  tools.py         tool functions and the allowlist registry
+  ratios.py        ratio maths and policy checks (no LLM)
+  docx_writer.py   Word memo
+  main.py          FastAPI
+  static/          demo page
+tests/
+```
+
+## Design decisions
+
+- **LangGraph over a hand-written loop.** The retry, the task loop and the repair loop are
+  explicit edges, so the control flow can be read straight from the graph. List-valued state
+  (flags, task log) uses reducers, so each node appends to it instead of overwriting it.
+- **Plan first, then execute,** instead of letting the model pick each next tool. A visible
+  plan can be validated before anything runs, and it keeps runs predictable for audit.
+- **One agent, not many.** The task is a single pipeline; extra agents would add
+  coordination without solving a problem this task has.
+- **For production:** a job queue with workers instead of a blocking request, LangGraph
+  checkpoints in Postgres so a run can resume, object storage for the memos, filling the
+  bank's own Word template, and a human-approval step inside the graph.
