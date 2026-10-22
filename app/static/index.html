@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Credit Memo Agent</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1b1f24; --muted:#6a737d; --line:#e1e4e8;
+          --llm:#6f42c1; --code:#0366d6; --pass:#1e7b34; --fail:#b01e1e; --warn:#b26a00; }
+  * { box-sizing:border-box }
+  body { margin:0; font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif; background:var(--bg); color:var(--ink) }
+  main { max-width:1100px; margin:0 auto; padding:24px 16px 60px }
+  h1 { margin:0 0 4px; font-size:24px } .sub { color:var(--muted); margin:0 0 20px }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px }
+  .presets { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px }
+  button { font:inherit; border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 12px; cursor:pointer }
+  button.primary { background:var(--ink); color:#fff; border-color:var(--ink); padding:8px 18px }
+  button:disabled { opacity:.5; cursor:wait }
+  textarea { width:100%; font:inherit; padding:10px; border:1px solid var(--line); border-radius:8px; min-height:70px }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px } @media (max-width:800px){ .grid{grid-template-columns:1fr} }
+  h2 { font-size:15px; margin:0 0 10px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted) }
+  .rec { font-size:20px; font-weight:700 } .rec.ok { color:var(--pass) } .rec.no { color:var(--fail) }
+  .meta { color:var(--muted); font-size:13px }
+  table { width:100%; border-collapse:collapse; font-size:13px }
+  td, th { text-align:left; padding:5px 6px; border-bottom:1px solid var(--line); vertical-align:top }
+  .tag { font-size:11px; font-weight:700; padding:1px 6px; border-radius:4px; color:#fff }
+  .tag.llm { background:var(--llm) } .tag.code { background:var(--code) }
+  .sc { color:var(--warn); font-weight:600; font-size:12px }
+  .failed { color:var(--fail) }
+  ul { margin:0; padding-left:18px } li { margin:3px 0 }
+  .lv-fail { color:var(--fail) } .lv-warn { color:var(--warn) } .lv-info { color:var(--muted) }
+  .check span { display:inline-block; margin:0 14px 6px 0 }
+  pre { background:#0d1117; color:#c9d1d9; padding:12px; border-radius:8px; overflow:auto; max-height:360px; font-size:12px }
+  .hidden { display:none }
+</style>
+</head>
+<body>
+<main>
+  <h1>Credit Memo Agent</h1>
+  <p class="sub">Ask for a credit memo. The agent plans its own tasks, runs them, checks its own work and writes a Word memo.
+    <span class="tag llm">LLM</span> steps plan and write; <span class="tag code">CODE</span> steps fetch data, calculate and decide.</p>
+
+  <div class="card">
+    <div class="presets">
+      <button data-q="Prepare a credit memo for Shree Ganesh Packaging's ₹2 crore working-capital loan.">Standard: Shree Ganesh ₹2 Cr</button>
+      <button data-q="Draft a credit memo for Patel Agro's ₹5 crore term loan. We want it in committee this week. Their FY25 audited financials aren't in yet, and their GST turnover doesn't match their bank statements.">Complex: Patel Agro ₹5 Cr</button>
+      <button data-q="Quick memo for Shree Ganesh, just the financials and a recommendation.">Partial request (self-check)</button>
+    </div>
+    <textarea id="q">Prepare a credit memo for Shree Ganesh Packaging's ₹2 crore working-capital loan.</textarea>
+    <p><button class="primary" id="go">Run agent</button> <span id="status" class="meta"></span></p>
+  </div>
+
+  <div id="out" class="hidden">
+    <div class="card">
+      <div id="rec" class="rec"></div>
+      <div id="meta" class="meta"></div>
+      <p><a id="dl"><button class="primary">Download memo (.docx)</button></a></p>
+    </div>
+    <div class="grid">
+      <div class="card"><h2>Agent's plan and execution</h2><table id="tasks"></table></div>
+      <div>
+        <div class="card"><h2>Self-check</h2><div id="check" class="check"></div></div>
+        <div class="card"><h2>Assumptions</h2><ul id="assumptions"></ul></div>
+        <div class="card"><h2>Flags</h2><ul id="flags"></ul></div>
+        <div class="card"><h2>Open questions for the credit officer</h2><ul id="questions"></ul></div>
+      </div>
+    </div>
+    <div class="card"><h2>Raw JSON response</h2><pre id="raw"></pre></div>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const list = (el, items, f = x => esc(x)) => el.innerHTML = items.length ? items.map(i => `<li>${f(i)}</li>`).join("") : "<li class='meta'>none</li>";
+
+document.querySelectorAll("[data-q]").forEach(b => b.onclick = () => $("q").value = b.dataset.q);
+
+$("go").onclick = async () => {
+  $("go").disabled = true; $("status").textContent = "Agent running…";
+  const t = Date.now(), tick = setInterval(() => $("status").textContent = `Agent running… ${((Date.now()-t)/1000).toFixed(0)}s`, 500);
+  try {
+    const r = await fetch("/agent", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({request:$("q").value})});
+    const d = await r.json();
+    if (!r.ok) throw new Error(JSON.stringify(d.detail ?? d));
+    show(d); $("status").textContent = "";
+  } catch (e) { $("status").textContent = "Error: " + e.message; }
+  finally { clearInterval(tick); $("go").disabled = false; }
+};
+
+function show(d) {
+  $("out").classList.remove("hidden");
+  const rec = d.recommendation || (d.error ? "FAILED: " + d.error : "No recommendation");
+  $("rec").textContent = (d.borrower ? d.borrower + ": " : "") + rec;
+  $("rec").className = "rec " + (rec.startsWith("RECOMMEND") ? "ok" : "no");
+  $("meta").textContent = `${d.tasks.length} steps · ${d.llm_calls} LLM calls · ${d.plan_attempts} plan attempt(s) · ${(d.total_ms/1000).toFixed(1)}s · run ${d.run_id}`;
+  $("dl").classList.toggle("hidden", !d.document_url); if (d.document_url) $("dl").href = d.document_url;
+  $("tasks").innerHTML = "<tr><th>#</th><th>Step</th><th>Result</th></tr>" + d.tasks.map(t => `<tr>
+      <td>${t.id || ""}</td>
+      <td><span class="tag ${t.kind}">${t.kind.toUpperCase()}</span> ${esc(t.tool)}
+        ${t.added_by === "self_check" ? '<div class="sc">↻ added by self-check</div>' : ""}
+        <div class="meta">${esc(t.purpose)}</div></td>
+      <td class="${t.status === "failed" ? "failed" : ""}">${esc(t.summary)} <span class="meta">${t.ms} ms</span></td></tr>`).join("");
+  const c = d.check;
+  $("check").innerHTML = c ? `<span><b>${c.passed ? "✓ passed" : "✗ gaps remain"}</b></span>
+      <span>sections ${c.sections}</span><span>ratios ${c.ratios_computed ? "computed" : "missing"}</span>
+      <span>policy rules ${c.policy_rules_tested} (${c.policy_passed} pass, ${c.policy_failed} fail)</span>
+      <span>repairs ${c.repairs}</span>` : "<span class='meta'>not reached</span>";
+  list($("assumptions"), d.assumptions);
+  list($("flags"), d.flags, f => `<span class="lv-${f.level}">[${f.level}]</span> ${esc(f.text)}`);
+  list($("questions"), d.open_questions);
+  $("raw").textContent = JSON.stringify(d, null, 2);
+}
+</script>
+</body>
+</html>
