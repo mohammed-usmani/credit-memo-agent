@@ -8,7 +8,7 @@ before handing it to a credit officer.
 **The rule it is built on: the LLM plans and writes; code calculates and decides.**
 A credit decision never depends on a model doing arithmetic.
 
-Python · LangGraph · FastAPI · Groq (Llama) · Pydantic · python-docx
+Python · LangGraph · FastAPI · Groq (gpt-oss-120b, free tier) · Pydantic · python-docx
 
 ## How it works
 
@@ -34,8 +34,10 @@ flowchart LR
 2. **Execute.** Each task calls a tool from a fixed allowlist. A failed task is recorded and
    the run continues.
 3. **Self-check** (the engineering improvement). Code verifies the finished memo: all 5
-   sections written, all ratios computed, every policy rule tested. Missing pieces are added
-   back as new tasks, once, and anything still missing is flagged in the memo.
+   sections written, all ratios computed, every policy rule tested, and **every figure in
+   the model's prose found in that section's source data, in ₹ crore**. Missing sections are
+   added back as new tasks; a section with an invented figure is redrafted with the reason.
+   This runs once, and anything still wrong is flagged in the memo.
 4. **Render.** A Word memo with the recommendation, assumptions and open questions, the
    ratio and policy tables, a sign-off block for the credit officer, and the agent's full
    task log as an audit trail.
@@ -49,7 +51,7 @@ flowchart LR
 | DSCR, loan-to-value, debt/equity, current ratio, GST vs bank gap | **Code** | Arithmetic must be exact and testable |
 | Policy pass/fail and the recommendation | **Code** | A lending decision must be explainable and auditable |
 | Writing each memo section | LLM, from that section's facts only | Prose is the model's job; it may not introduce new numbers |
-| Completeness and policy check | Code | The agent checks its own work before a human does |
+| Completeness and figure check | Code | The agent checks its own work before a human does |
 
 ## Demo scenarios
 
@@ -60,6 +62,20 @@ The borrowers and the credit policy are mock data in `app/mock_data.json`.
 | "Prepare a credit memo for Shree Ganesh Packaging's ₹2 crore working-capital loan." | Complete data | All 6 policy rules pass · DSCR 1.60 · **recommend approval** |
 | "Draft a credit memo for Patel Agro's ₹5 crore term loan. We want it in committee this week. Their FY25 audited financials aren't in yet, and their GST turnover doesn't match their bank statements." | Missing financials, conflicting data, time pressure | Uses FY25 provisional figures and says so · flags an 18% GST vs bank gap · DSCR 1.08 below the 1.25 minimum · **refer to committee with conditions** |
 | "Quick memo for Shree Ganesh, just the financials and a recommendation." | A plan that skips required sections | Self-check adds the 3 missing sections the memo template requires |
+
+## Results on the live model
+
+Run against Groq `openai/gpt-oss-120b` (fallback `gpt-oss-20b`). The memos are in [`samples/`](samples/).
+
+| Scenario | What happened | LLM calls | Time |
+|---|---|---|---|
+| Standard | 11-task plan, all 6 rules pass, DSCR 1.60, **recommend approval** | 6 | ~6 s |
+| Complex | Fetched FY24 as well because FY25 is provisional · 2 assumptions recorded · DSCR 1.08 and 18.1% GST gap fail · 2 open questions · **refer to committee** | 6 | ~7 s |
+| Partial request | First plan rejected (no loan amount) and retried · plan wrote 2 of 5 sections · self-check added the other 3 | 7 | 12–40 s |
+
+What the self-check caught while building this: an early draft wrote "$14.6 million" for
+₹14.6 Cr and called the ₹2.3 Cr annual debt service a coverage ratio. The fix was labelled
+facts with units, plus the figure check that now redrafts any section like that.
 
 ## API
 
@@ -95,7 +111,8 @@ app/
   docx_writer.py   Word memo
   main.py          FastAPI
   static/          demo page
-tests/
+samples/           memos from the three scenarios
+tests/             ratio maths; the graph with a fake LLM (retry, repair, redraft, guardrail)
 ```
 
 ## Design decisions
