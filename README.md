@@ -73,9 +73,26 @@ Run against Groq `openai/gpt-oss-120b` (fallback `gpt-oss-20b`). The memos are i
 | Complex | Fetched FY24 as well because FY25 is provisional · 2 assumptions recorded · DSCR 1.08 and 18.1% GST gap fail · 2 open questions · **refer to committee** | 6 | ~7 s |
 | Partial request | First plan rejected (no loan amount) and retried · plan wrote 2 of 5 sections · self-check added the other 3 | 7 | 12–40 s |
 
-What the self-check caught while building this: an early draft wrote "$14.6 million" for
-₹14.6 Cr and called the ₹2.3 Cr annual debt service a coverage ratio. The fix was labelled
-facts with units, plus the figure check that now redrafts any section like that.
+## Debugging insight
+
+**Issue.** The first memos read well but were wrong: "$14.6 million" for ₹14.6 Cr, the ₹2.3 Cr
+annual debt service called a coverage ratio, and loan-to-value 58.1% described as a policy
+breach when it passes.
+
+**Root cause.** The input, not the model. Facts had no units, keys like `debt_service_cr` were
+ambiguous, and the Risk Assessment section never saw the policy results, so it guessed.
+
+**Fix.** Self-explaining fact labels with units, the policy results passed to every analysis
+section, and a figure check in the self-check that redrafts any section quoting a number that
+isn't in its source data (`ungrounded` in `app/tools.py`, tested in `tests/test_graph.py`).
+
+## Tradeoff: autonomous planning vs a deterministic workflow
+
+A fixed pipeline is predictable but can't adapt: it would not have fetched FY24 for Patel Agro or
+recorded how to treat provisional figures. A fully autonomous agent adapts, but a bank can't audit
+a model choosing tools freely. So the split is: **the model decides what to do; code validates the
+plan, does the maths, makes the decision and makes the repairs.** Some flexibility is given up for
+runs that are repeatable and auditable.
 
 ## API
 
