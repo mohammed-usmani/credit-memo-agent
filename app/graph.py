@@ -21,7 +21,7 @@ from . import docx_writer
 from .llm import plan_json
 from .prompts import PLAN_PROMPT, RETRY_SUFFIX
 from .schemas import SECTIONS, Plan, Task
-from .tools import REGISTRY, REQUIRED_FOR_RATIOS, ToolError, find_borrower
+from .tools import REGISTRY, REQUIRED_FOR_RATIOS, ToolError, find_borrower, ungrounded
 
 MAX_PLAN_ATTEMPTS = 3
 MAX_REPAIRS = 1
@@ -92,7 +92,8 @@ def validate_plan(state: AgentState) -> dict:
         if problems:
             raise ValueError("; ".join(problems))
     except (ValidationError, ValueError) as e:
-        msg = str(e)[:800]
+        msg = ("; ".join(f"{'.'.join(map(str, x['loc'])) or 'plan'}: {x['msg']}" for x in e.errors())
+               if isinstance(e, ValidationError) else str(e))[:800]
         if state["plan_attempts"] >= MAX_PLAN_ATTEMPTS:
             return {"plan_error": msg, "error": f"No valid plan after {MAX_PLAN_ATTEMPTS} attempts: {msg}"}
         return {"plan_error": msg, "flags": [{"level": "info", "text": f"Plan attempt {state['plan_attempts']} "
@@ -130,23 +131,26 @@ def execute(state: AgentState) -> dict:
 
 
 def self_check(state: AgentState) -> dict:
-    """Reflection in code: is the memo complete, and was every policy rule actually tested?"""
-    d = state["data"]
-    missing_sections = [s for s in SECTIONS if s not in state["sections"]]
+    """Reflection in code: is the memo complete, is every figure grounded, was every policy rule tested?"""
+    d, sections = state["data"], state["sections"]
+    missing_sections = [s for s in SECTIONS if s not in sections]
+    bad = {s: p for s in SECTIONS if s in sections and (p := ungrounded(s, sections[s], state))}
     rows = d.get("policy_rows", [])
     check = {
         "sections": f"{len(SECTIONS) - len(missing_sections)}/{len(SECTIONS)}",
         "missing_sections": missing_sections,
+        "ungrounded": bad,
         "ratios_computed": "ratios" in d,
         "policy_rules_tested": len(rows),
         "policy_passed": sum(r["result"] == "PASS" for r in rows),
         "policy_failed": sum(r["result"] == "FAIL" for r in rows),
         "repairs": state["check_loops"],
     }
-    check["passed"] = not missing_sections and check["ratios_computed"]
+    check["passed"] = not missing_sections and not bad and check["ratios_computed"]
     update = {"check": check}
     if not check["passed"] and state["check_loops"] >= MAX_REPAIRS:
-        gaps = missing_sections + ([] if check["ratios_computed"] else ["ratios"])
+        gaps = missing_sections + [f"{k} ({v})" for k, v in bad.items()] + \
+            ([] if check["ratios_computed"] else ["ratios"])
         update["flags"] = [{"level": "fail", "text": f"Memo incomplete after self-check repair: {', '.join(gaps)}"}]
     return update
 
@@ -163,6 +167,9 @@ def repair(state: AgentState) -> dict:
         new.append(Task(id=0, tool="compute_ratios", purpose="compute ratios and check policy"))
     for s in state["check"]["missing_sections"]:
         new.append(Task(id=0, tool="draft_section", args={"section": s}, purpose=f"write missing section: {s}"))
+    for s, problem in state["check"]["ungrounded"].items():
+        new.append(Task(id=0, tool="draft_section", args={"section": s, "feedback": problem},
+                        purpose=f"redraft {s}: {problem}"))
     for i, t in enumerate(new):
         t.id = next_id + i
     plan = p.model_copy(update={"tasks": p.tasks + new})

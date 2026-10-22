@@ -13,7 +13,7 @@ GOOD = {"borrower": "Patel Agro", "loan_amount_cr": 5, "loan_type": "term_loan",
 def fake(monkeypatch, plans):
     replies = iter(plans)
     monkeypatch.setattr(graph, "plan_json", lambda prompt: next(replies))
-    monkeypatch.setattr(tools, "write_section", lambda section, facts: f"{section} text.")
+    monkeypatch.setattr(tools, "write_section", lambda section, facts, feedback="": f"{section} text.")
 
 
 def test_bad_plan_is_retried_then_missing_sections_are_repaired(monkeypatch, tmp_path):
@@ -44,3 +44,15 @@ def test_ratios_before_fetch_fails_and_repair_fetches(monkeypatch, tmp_path):
     s = graph.run("Credit memo for Patel Agro", "t3")
     assert s["task_log"][2]["status"] == "failed"        # compute_ratios with nothing fetched
     assert s["check"]["ratios_computed"] and s["check"]["sections"] == "5/5"
+
+
+def test_invented_figures_and_dollars_are_redrafted(monkeypatch, tmp_path):
+    monkeypatch.setattr(graph.docx_writer, "OUT", tmp_path)
+    fake(monkeypatch, [json.dumps(GOOD)])
+    monkeypatch.setattr(tools, "write_section", lambda section, facts, feedback="":
+                        f"{section} fixed." if feedback else f"{section}: revenue of $42.7 million.")
+    s = graph.run("Credit memo for Patel Agro, 5 crore term loan", "t4")
+    redrafts = [t for t in s["task_log"] if "redraft" in t["purpose"]]
+    assert [t["purpose"].split(":")[0] for t in redrafts] == ["redraft Recommendation"]
+    assert "42.7" in redrafts[0]["purpose"] and "dollars" in redrafts[0]["purpose"]
+    assert s["check"]["passed"] is False            # the 4 missing sections were also bad first time round

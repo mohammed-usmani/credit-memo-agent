@@ -100,6 +100,7 @@ def render(state: dict) -> str:
     doc.add_paragraph(f"Sections {c.get('sections', '?')} · ratios computed: {'yes' if c.get('ratios_computed') else 'no'}"
                       f" · policy rules tested: {c.get('policy_rules_tested', 0)} "
                       f"({c.get('policy_passed', 0)} pass, {c.get('policy_failed', 0)} fail)"
+                      f" · figures checked against source data: {'all grounded' if not c.get('ungrounded') else ', '.join(c['ungrounded'])}"
                       f" · repairs made: {c.get('repairs', 0)}")
 
     doc.add_heading("Credit officer sign-off", 2)

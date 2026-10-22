@@ -109,16 +109,24 @@ def compute_ratios(args, state):
     return res
 
 
+def _labelled(r: dict | None) -> dict | None:
+    """Ratios with self-explaining keys, so the model can't mistake an amount for a ratio."""
+    return r and {"DSCR": r["dscr"], "loan_to_value_pct": r["ltv_pct"], "debt_to_equity": r["debt_equity"],
+                  "current_ratio": r["current_ratio"], "gst_vs_bank_credits_gap_pct": r["gst_bank_gap_pct"],
+                  "annual_cash_accrual_inr_cr": r["cash_accrual_cr"],
+                  "annual_debt_service_incl_new_loan_inr_cr": r["debt_service_cr"]}
+
+
 def _facts(section: str, state: dict) -> dict:
     """Only the facts each section needs: shorter prompts and fewer chances to invent numbers."""
     d, plan = state["data"], state["plan"]
-    loan = {"amount_cr": plan.loan_amount_cr, "type": plan.loan_type}
+    loan = {"amount_inr_cr": plan.loan_amount_cr, "type": plan.loan_type}
     flags = [f["text"] for f in state["flags"]]
     return {
         "Borrower Overview": {"loan_request": loan, "profile": d.get("profile")},
-        "Financial Analysis": {"financials": d.get("financials"), "ratios": d.get("ratios"),
+        "Financial Analysis": {"financials": d.get("financials"), "ratios": _labelled(d.get("ratios")),
                                "ratio_year": d.get("ratio_year")},
-        "Risk Assessment": {"ratios": d.get("ratios"), "gst": d.get("gst"), "bank": d.get("bank"), "flags": flags},
+        "Risk Assessment": {"ratios": _labelled(d.get("ratios")), "gst": d.get("gst"), "bank": d.get("bank"), "flags": flags},
         "Policy Compliance": {"policy_checks": d.get("policy_rows")},
         "Recommendation": {"decision": d.get("recommendation"), "loan_request": loan,
                            "failed_rules": [r for r in d.get("policy_rows", []) if r["result"] == "FAIL"],
@@ -133,8 +141,24 @@ def draft_section(args, state):
     facts = _facts(section, state)
     if not any(facts.values()):
         raise ToolError(f"no facts available yet for {section}")
-    text = write_section(section, facts)
+    text = write_section(section, facts, args.get("feedback", ""))
     return ToolResult(f"{len(text.split())} words", section=(section, text))
+
+
+def _numbers(text: str) -> set[float]:
+    return {float(n) for n in re.findall(r"\d+(?:\.\d+)?", re.sub(r"(?<=\d),(?=\d)", "", text))}
+
+
+def ungrounded(section: str, text: str, state: dict) -> str | None:
+    """Self-check on a drafted section: every figure must be in its facts, and money must be in ₹ crore."""
+    problems = []
+    if re.search(r"\$|\bUSD\b|\bdollars?\b|\bmillion\b", text, re.I):
+        problems.append("amounts must be written in ₹ crore, not dollars or millions")
+    allowed = _numbers(json.dumps(_facts(section, state), ensure_ascii=False))
+    extra = sorted(n for n in _numbers(text) - allowed if not (n.is_integer() and n <= 10))  # list numbering
+    if extra:
+        problems.append(f"figures not in the source data: {', '.join(f'{n:g}' for n in extra)}")
+    return "; ".join(problems) or None
 
 
 REGISTRY = {

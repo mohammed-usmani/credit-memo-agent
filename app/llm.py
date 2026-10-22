@@ -7,7 +7,7 @@ from functools import lru_cache
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 
-from .prompts import SECTION_EXTRA, SECTION_PROMPT
+from .prompts import REDRAFT_SUFFIX, SECTION_EXTRA, SECTION_PROMPT
 
 load_dotenv()
 
@@ -34,7 +34,9 @@ def plan_json(prompt: str) -> str:
     return _invoke(prompt, json_mode=True)
 
 
-def write_section(section: str, facts: dict) -> str:
+def write_section(section: str, facts: dict, feedback: str = "") -> str:
     prompt = SECTION_PROMPT.format(section=section, extra=SECTION_EXTRA.get(section, ""),
                                    facts=json.dumps(facts, ensure_ascii=False, indent=1))
+    if feedback:
+        prompt += REDRAFT_SUFFIX.format(feedback=feedback)
     return _invoke(prompt, json_mode=False).strip()
