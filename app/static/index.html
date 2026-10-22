@@ -104,6 +104,7 @@ function show(d) {
   $("check").innerHTML = c ? `<span><b>${c.passed ? "✓ passed" : "✗ gaps remain"}</b></span>
       <span>sections ${c.sections}</span><span>ratios ${c.ratios_computed ? "computed" : "missing"}</span>
       <span>policy rules ${c.policy_rules_tested} (${c.policy_passed} pass, ${c.policy_failed} fail)</span>
+      <span>figures ${Object.keys(c.ungrounded || {}).length ? "not grounded: " + esc(Object.keys(c.ungrounded).join(", ")) : "all grounded in source data"}</span>
       <span>repairs ${c.repairs}</span>` : "<span class='meta'>not reached</span>";
   list($("assumptions"), d.assumptions);
   list($("flags"), d.flags, f => `<span class="lv-${f.level}">[${f.level}]</span> ${esc(f.text)}`);
