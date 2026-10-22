@@ -43,7 +43,7 @@
         "city": "Bhiwandi",
         "years_in_business": 14,
         "promoters": ["Sunil Joshi"],
-        "existing_lender": "None (first banking relationship)"
+        "existing_lender": "Cosmos Co-operative Bank"
       },
       "financials": {
         "FY23": {"status": "audited", "revenue": 18.9, "pat": 0.82, "depreciation": 0.35, "interest": 0.30},

@@ -125,8 +125,9 @@ def _facts(section: str, state: dict) -> dict:
     return {
         "Borrower Overview": {"loan_request": loan, "profile": d.get("profile")},
         "Financial Analysis": {"financials": d.get("financials"), "ratios": _labelled(d.get("ratios")),
-                               "ratio_year": d.get("ratio_year")},
-        "Risk Assessment": {"ratios": _labelled(d.get("ratios")), "gst": d.get("gst"), "bank": d.get("bank"), "flags": flags},
+                               "ratio_year": d.get("ratio_year"), "policy_checks": d.get("policy_rows")},
+        "Risk Assessment": {"ratios": _labelled(d.get("ratios")), "policy_checks": d.get("policy_rows"),
+                            "gst": d.get("gst"), "bank": d.get("bank"), "flags": flags},
         "Policy Compliance": {"policy_checks": d.get("policy_rows")},
         "Recommendation": {"decision": d.get("recommendation"), "loan_request": loan,
                            "failed_rules": [r for r in d.get("policy_rows", []) if r["result"] == "FAIL"],

@@ -35,10 +35,14 @@ Your previous plan was rejected by the validator:
 {error}
 Return a corrected plan as one JSON object."""
 
-SECTION_PROMPT = """Write the "{section}" section of a bank credit memo: 80 to 150 words, formal and factual.
-Use only the FACTS below. Every figure you write must appear in FACTS. If something needed is
-missing, say so plainly instead of estimating. All amounts are in Indian rupees crore: write them
-as "₹15.4 Cr", never in dollars or millions. No heading, no markdown, plain paragraphs.
+SECTION_PROMPT = """Write the "{section}" section of a bank credit memo, formal and factual: at most 150 words, and shorter when FACTS are few.
+Use only the FACTS below: every figure and every detail (loan purpose, history, plans) must be in
+FACTS. Other sections cover the other facts, so write only about this section's FACTS and never
+comment on what they leave out. Do not calculate new figures (growth rates, margins). Whether a
+ratio is acceptable comes only from FACTS.policy_checks. Only the Recommendation section gives a decision. All amounts are in Indian rupees crore: write them
+as "₹15.4 Cr", never in dollars or millions. Formatting: short paragraphs separated by a blank line;
+you may put the decision and up to three key figures in **bold**, and write a list (conditions, risks) as lines
+starting with "- ". No headings, no tables, no other markdown.
 {extra}
 FACTS:
 {facts}
@@ -46,7 +50,7 @@ FACTS:
 
 SECTION_EXTRA = {
     "Recommendation": "State the decision exactly as given in FACTS.decision, then justify it and list any "
-                      "conditions (for example, submission of audited financials, explanation of flagged gaps).",
+                      "conditions as '- ' lines (for example, submission of audited financials, explanation of flagged gaps).",
     "Policy Compliance": "Summarise which rules pass and which fail; the full table is added separately.",
     "Financial Analysis": "Comment on the trend across the years given and on the ratios; the ratio table is added separately.",
 }

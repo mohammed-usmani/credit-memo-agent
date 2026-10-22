@@ -70,7 +70,7 @@ def plan(state: AgentState) -> dict:
     attempt = state["plan_attempts"] + 1
     return {"plan_attempts": attempt, "llm_calls": state["llm_calls"] + 1, "raw_plan": raw,
             "task_log": [{"id": 0, "tool": "plan", "kind": "llm", "purpose": f"plan the work (attempt {attempt})",
-                          "status": "done", "summary": "", "ms": int((time.time() - t) * 1000),
+                          "status": "done", "summary": "plan drafted", "ms": int((time.time() - t) * 1000),
                           "added_by": "planner"}]}
 
 
