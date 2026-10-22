@@ -1,0 +1,66 @@
+{
+  "_note": "Mock borrowers and a mock credit policy for the demo. All amounts in INR crore.",
+  "policy": {
+    "name": "Mock SME Credit Policy v1",
+    "min_dscr": 1.25,
+    "max_ltv_pct": 70,
+    "max_debt_equity": 2.0,
+    "min_current_ratio": 1.2,
+    "max_gst_bank_gap_pct": 10,
+    "max_loan_cr": 10
+  },
+  "borrowers": {
+    "patel-agro": {
+      "profile": {
+        "name": "Patel Agro Pvt Ltd",
+        "industry": "Food processing (spices and pulses)",
+        "city": "Nashik",
+        "years_in_business": 9,
+        "promoters": ["Ramesh Patel", "Kavita Patel"],
+        "existing_lender": "Saraswat Co-operative Bank"
+      },
+      "financials": {
+        "FY23": {"status": "audited", "revenue": 13.1, "pat": 0.95, "depreciation": 0.52, "interest": 0.61},
+        "FY24": {"status": "audited", "revenue": 14.6, "pat": 1.08, "depreciation": 0.56, "interest": 0.64},
+        "FY25": {"status": "provisional", "revenue": 15.4, "pat": 1.20, "depreciation": 0.60, "interest": 0.68}
+      },
+      "balance_sheet": {
+        "net_worth": 5.0,
+        "existing_debt": 4.5,
+        "existing_debt_service": 0.80,
+        "current_assets": 6.5,
+        "current_liabilities": 5.0,
+        "collateral_value": 8.6,
+        "collateral": "Factory land and building, Nashik MIDC"
+      },
+      "gst": {"turnover_12m": 18.2, "filings_on_time": "11 of 12"},
+      "bank": {"credits_12m": 14.9, "avg_balance": 0.42, "bounced_cheques": 2}
+    },
+    "shree-ganesh-packaging": {
+      "profile": {
+        "name": "Shree Ganesh Packaging",
+        "industry": "Corrugated packaging",
+        "city": "Bhiwandi",
+        "years_in_business": 14,
+        "promoters": ["Sunil Joshi"],
+        "existing_lender": "None (first banking relationship)"
+      },
+      "financials": {
+        "FY23": {"status": "audited", "revenue": 18.9, "pat": 0.82, "depreciation": 0.35, "interest": 0.30},
+        "FY24": {"status": "audited", "revenue": 20.4, "pat": 0.91, "depreciation": 0.38, "interest": 0.33},
+        "FY25": {"status": "audited", "revenue": 21.8, "pat": 1.00, "depreciation": 0.40, "interest": 0.36}
+      },
+      "balance_sheet": {
+        "net_worth": 4.0,
+        "existing_debt": 2.5,
+        "existing_debt_service": 0.90,
+        "current_assets": 4.5,
+        "current_liabilities": 3.0,
+        "collateral_value": 4.0,
+        "collateral": "Hypothecation of stock and receivables, plus office premises"
+      },
+      "gst": {"turnover_12m": 22.0, "filings_on_time": "12 of 12"},
+      "bank": {"credits_12m": 21.1, "avg_balance": 0.78, "bounced_cheques": 0}
+    }
+  }
+}
